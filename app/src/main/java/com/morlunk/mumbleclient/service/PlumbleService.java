@@ -327,8 +327,9 @@ public class PlumbleService extends JumbleService implements
     }
 
     @Override
-    public void onConnectionEstablished() {
-        super.onConnectionEstablished();
+    public void onConnectionSynchronized() {
+        super.onConnectionSynchronized();
+
         // Restore mute/deafen state
         if(mSettings.isMuted() || mSettings.isDeafened()) {
             try {
@@ -337,12 +338,6 @@ public class PlumbleService extends JumbleService implements
                 e.printStackTrace();
             }
         }
-
-    }
-
-    @Override
-    public void onConnectionSynchronized() {
-        super.onConnectionSynchronized();
 
         registerReceiver(mTalkReceiver, new IntentFilter(TalkBroadcastReceiver.BROADCAST_TALK));
 
@@ -390,6 +385,8 @@ public class PlumbleService extends JumbleService implements
                 break;
             case Settings.PREF_HANDSET_MODE:
                 setProximitySensorOn(isConnected() && mSettings.isHandsetMode());
+                changedExtras.putInt(JumbleService.EXTRAS_AUDIO_STREAM, mSettings.isHandsetMode() ?
+                                     AudioManager.STREAM_VOICE_CALL : AudioManager.STREAM_MUSIC);
                 break;
             case Settings.PREF_THRESHOLD:
                 changedExtras.putFloat(JumbleService.EXTRAS_DETECTION_THRESHOLD,
