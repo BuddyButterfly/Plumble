@@ -23,6 +23,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.v4.app.DialogFragment;
 import android.support.v4.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -110,24 +111,26 @@ public class FavouriteServerListFragment extends Fragment implements OnItemClick
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        if(item.getItemId() == R.id.menu_add_server_item) {
-            addServer();
-            return true;
+        switch (item.getItemId()) {
+            case R.id.menu_add_server_item:
+                addServer();
+                return true;
+            case R.id.menu_quick_connect:
+                ServerEditFragment.createServerEditDialog(getActivity(), null, ServerEditFragment.Action.CONNECT_ACTION, true)
+                        .show(getFragmentManager(), "serverInfo");
+                return true;
         }
         return super.onOptionsItemSelected(item);
     }
 
     public void addServer() {
-        ServerEditFragment infoDialog = new ServerEditFragment();
-        infoDialog.show(getFragmentManager(), "serverInfo");
+        ServerEditFragment.createServerEditDialog(getActivity(), null, ServerEditFragment.Action.ADD_ACTION, false)
+                .show(getFragmentManager(), "serverInfo");
     }
 
     public void editServer(Server server) {
-        ServerEditFragment infoDialog = new ServerEditFragment();
-        Bundle args = new Bundle();
-        args.putParcelable("server", server);
-        infoDialog.setArguments(args);
-        infoDialog.show(getFragmentManager(), "serverInfo");
+        ServerEditFragment.createServerEditDialog(getActivity(), server, ServerEditFragment.Action.EDIT_ACTION, false)
+                .show(getFragmentManager(), "serverInfo");
     }
 
     public void shareServer(Server server) {

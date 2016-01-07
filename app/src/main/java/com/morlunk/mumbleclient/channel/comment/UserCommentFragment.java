@@ -30,10 +30,10 @@ import com.morlunk.jumble.util.JumbleObserver;
 public class UserCommentFragment extends AbstractCommentFragment {
 
     @Override
-    public void requestComment(final IJumbleService service) throws RemoteException {
+    public void requestComment(final IJumbleService service) {
         service.registerObserver(new JumbleObserver() {
             @Override
-            public void onUserStateUpdated(IUser user) throws RemoteException {
+            public void onUserStateUpdated(IUser user) {
                 if(user.getSession() == getSession() &&
                         user.getComment() != null) {
                     loadComment(user.getComment());
@@ -45,7 +45,7 @@ public class UserCommentFragment extends AbstractCommentFragment {
     }
 
     @Override
-    public void editComment(IJumbleService service, String comment) throws RemoteException {
+    public void editComment(IJumbleService service, String comment) {
         service.setUserComment(getSession(), comment);
     }
 

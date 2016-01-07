@@ -30,10 +30,10 @@ import com.morlunk.jumble.util.JumbleObserver;
 public class ChannelDescriptionFragment extends AbstractCommentFragment {
 
     @Override
-    public void requestComment(final IJumbleService service) throws RemoteException {
+    public void requestComment(final IJumbleService service) {
         service.registerObserver(new JumbleObserver() {
             @Override
-            public void onChannelStateUpdated(IChannel channel) throws RemoteException {
+            public void onChannelStateUpdated(IChannel channel) {
                 if(channel.getId() == getChannelId() &&
                         channel.getDescription() != null) {
                     loadComment(channel.getDescription());
@@ -45,7 +45,7 @@ public class ChannelDescriptionFragment extends AbstractCommentFragment {
     }
 
     @Override
-    public void editComment(IJumbleService service, String comment) throws RemoteException {
+    public void editComment(IJumbleService service, String comment) {
         // TODO
     }
 
