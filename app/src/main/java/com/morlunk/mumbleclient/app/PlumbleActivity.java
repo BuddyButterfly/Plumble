@@ -39,6 +39,7 @@ import android.support.v4.app.FragmentTransaction;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarActivity;
 import android.support.v7.app.ActionBarDrawerToggle;
+import android.text.InputType;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -52,6 +53,7 @@ import android.widget.Toast;
 import com.morlunk.jumble.IJumbleService;
 import com.morlunk.jumble.JumbleService;
 import com.morlunk.jumble.model.Server;
+import com.morlunk.jumble.protobuf.Mumble;
 import com.morlunk.jumble.util.JumbleException;
 import com.morlunk.jumble.util.JumbleObserver;
 import com.morlunk.jumble.util.MumbleURLParser;
@@ -61,6 +63,7 @@ import com.morlunk.mumbleclient.Settings;
 import com.morlunk.mumbleclient.channel.AccessTokenFragment;
 import com.morlunk.mumbleclient.channel.ChannelFragment;
 import com.morlunk.mumbleclient.channel.ServerInfoFragment;
+import com.morlunk.mumbleclient.db.DatabaseCertificate;
 import com.morlunk.mumbleclient.db.DatabaseProvider;
 import com.morlunk.mumbleclient.db.PlumbleDatabase;
 import com.morlunk.mumbleclient.db.PlumbleSQLiteDatabase;
@@ -89,7 +92,7 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 
-import info.guardianproject.onionkit.ui.OrbotHelper;
+import info.guardianproject.netcipher.proxy.OrbotHelper;
 
 public class PlumbleActivity extends ActionBarActivity implements ListView.OnItemClickListener,
         FavouriteServerListFragment.ServerConnectHandler, JumbleServiceProvider, DatabaseProvider,
@@ -449,7 +452,7 @@ public class PlumbleActivity extends ActionBarActivity implements ListView.OnIte
      * Will do nothing if it isn't the first launch.
      */
     private void showSetupWizard() {
-        // Prompt the user to generate a certificate, FIXME
+        // Prompt the user to generate a certificate.
         if(mSettings.isUsingCertificate()) return;
         AlertDialog.Builder adb = new AlertDialog.Builder(this);
         adb.setTitle(R.string.first_run_generate_certificate_title);
@@ -459,9 +462,9 @@ public class PlumbleActivity extends ActionBarActivity implements ListView.OnIte
             public void onClick(DialogInterface dialog, int which) {
                 PlumbleCertificateGenerateTask generateTask = new PlumbleCertificateGenerateTask(PlumbleActivity.this) {
                     @Override
-                    protected void onPostExecute(File result) {
+                    protected void onPostExecute(DatabaseCertificate result) {
                         super.onPostExecute(result);
-                        if(result != null) mSettings.setCertificatePath(result.getAbsolutePath());
+                        if(result != null) mSettings.setDefaultCertificateId(result.getId());
                     }
                 };
                 generateTask.execute();
@@ -543,10 +546,10 @@ public class PlumbleActivity extends ActionBarActivity implements ListView.OnIte
         }
 
         // Prompt to start Orbot if enabled but not running
+        // TODO(acomminos): possibly detect onion address before connecting?
         if (mSettings.isTorEnabled()) {
-            OrbotHelper orbotHelper = new OrbotHelper(this);
-            if (!orbotHelper.isOrbotRunning()) {
-                orbotHelper.requestOrbotStart(this);
+            if (!OrbotHelper.isOrbotRunning(this)) {
+                OrbotHelper.requestShowOrbotStart(this);
                 return;
             }
         }
@@ -636,6 +639,37 @@ public class PlumbleActivity extends ActionBarActivity implements ListView.OnIte
                                     getService().cancelReconnect();
                                     getService().markErrorShown();
                                 }
+                            }
+                        });
+                    } else if (error.getReason() == JumbleException.JumbleDisconnectReason.REJECT &&
+                               (error.getReject().getType() == Mumble.Reject.RejectType.WrongUserPW ||
+                                error.getReject().getType() == Mumble.Reject.RejectType.WrongServerPW)) {
+                        // FIXME(acomminos): Long conditional.
+                        final EditText passwordField = new EditText(this);
+                        passwordField.setInputType(InputType.TYPE_CLASS_TEXT |
+                                InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                        passwordField.setHint(R.string.password);
+                        ab.setTitle(R.string.invalid_password);
+                        ab.setMessage(error.getMessage());
+                        ab.setView(passwordField);
+                        ab.setPositiveButton(R.string.reconnect, new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                Server server = getService().getConnectedServer();
+                                if (server == null)
+                                    return;
+                                String password = passwordField.getText().toString();
+                                server.setPassword(password);
+                                if (server.isSaved())
+                                    mDatabase.updateServer(server);
+                                connectToServer(server);
+                            }
+                        });
+                        ab.setNegativeButton(android.R.string.cancel, new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                if (getService() != null)
+                                    getService().markErrorShown();
                             }
                         });
                     } else {

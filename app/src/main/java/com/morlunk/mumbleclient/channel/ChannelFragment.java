@@ -36,11 +36,19 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
+import com.morlunk.jumble.IJumbleService;
+import com.morlunk.jumble.JumbleService;
 import com.morlunk.jumble.model.IUser;
 import com.morlunk.jumble.model.User;
+import com.morlunk.jumble.model.WhisperTarget;
 import com.morlunk.jumble.util.IJumbleObserver;
 import com.morlunk.jumble.util.JumbleObserver;
+import com.morlunk.jumble.util.VoiceTargetMode;
 import com.morlunk.mumbleclient.R;
 import com.morlunk.mumbleclient.Settings;
 import com.morlunk.mumbleclient.util.JumbleServiceFragment;
@@ -58,6 +66,10 @@ public class ChannelFragment extends JumbleServiceFragment implements SharedPref
     private PagerTabStrip mTabStrip;
     private Button mTalkButton;
     private View mTalkView;
+
+    private View mTargetPanel;
+    private ImageView mTargetPanelCancel;
+    private TextView mTargetPanelText;
 
     private ChatTarget mChatTarget;
     /** Chat target listeners, notified when the chat target is changed. */
@@ -80,6 +92,11 @@ public class ChannelFragment extends JumbleServiceFragment implements SharedPref
                         break;
                 }
             }
+        }
+
+        @Override
+        public void onVoiceTargetChanged(VoiceTargetMode mode) {
+            configureTargetPanel();
         }
     };
 
@@ -124,6 +141,21 @@ public class ChannelFragment extends JumbleServiceFragment implements SharedPref
                 return true;
             }
         });
+        mTargetPanel = view.findViewById(R.id.target_panel);
+        mTargetPanelCancel = (ImageView) view.findViewById(R.id.target_panel_cancel);
+        mTargetPanelCancel.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (getService() != null &&
+                        getService().getConnectionState() == JumbleService.ConnectionState.CONNECTED &&
+                        getService().getVoiceTargetMode() == VoiceTargetMode.WHISPER) {
+                    byte target = getService().getVoiceTargetId();
+                    getService().setVoiceTargetId((byte) 0);
+                    getService().unregisterWhisperTarget(target);
+                }
+            }
+        });
+        mTargetPanelText = (TextView) view.findViewById(R.id.target_panel_warning);
         configureInput();
         return view;
     }
@@ -187,6 +219,23 @@ public class ChannelFragment extends JumbleServiceFragment implements SharedPref
         return mObserver;
     }
 
+    @Override
+    public void onServiceBound(IJumbleService service) {
+        super.onServiceBound(service);
+        configureTargetPanel();
+    }
+
+    private void configureTargetPanel() {
+        VoiceTargetMode mode = getService().getVoiceTargetMode();
+        if (mode == VoiceTargetMode.WHISPER) {
+            WhisperTarget target = getService().getWhisperTarget();
+            mTargetPanel.setVisibility(View.VISIBLE);
+            mTargetPanelText.setText(getString(R.string.shout_target, target.getName()));
+        } else {
+            mTargetPanel.setVisibility(View.GONE);
+        }
+    }
+
     /**
      * @return true if the channel fragment is set to display only the user's pinned channels.
      */
@@ -200,14 +249,20 @@ public class ChannelFragment extends JumbleServiceFragment implements SharedPref
      */
     private void configureInput() {
         Settings settings = Settings.getInstance(getActivity());
+
+        ViewGroup.LayoutParams params = mTalkView.getLayoutParams();
+        params.height = settings.getPTTButtonHeight();
+        mTalkButton.setLayoutParams(params);
+
         boolean showPttButton = settings.isPushToTalkButtonShown() && settings.getInputMethod().equals(Settings.ARRAY_INPUT_METHOD_PTT);
         mTalkView.setVisibility(showPttButton ? View.VISIBLE : View.GONE);
     }
 
     @Override
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-        if(Settings.PREF_INPUT_METHOD.equals(key) ||
-                Settings.PREF_PUSH_BUTTON_HIDE_KEY.equals(key))
+        if(Settings.PREF_INPUT_METHOD.equals(key)
+            || Settings.PREF_PUSH_BUTTON_HIDE_KEY.equals(key)
+            || Settings.PREF_PTT_BUTTON_HEIGHT.equals(key))
             configureInput();
     }
 

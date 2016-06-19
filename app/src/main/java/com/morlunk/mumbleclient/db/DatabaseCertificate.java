@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Andrew Comminos
+ * Copyright (C) 2016 Andrew Comminos <andrew@comminos.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,10 +15,31 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+package com.morlunk.mumbleclient.db;
 
+/**
+ * A stub for a certificate entry in Plumble's database.
+ * Created by andrew on 11/01/16.
+ */
+public class DatabaseCertificate {
+    private final long mId;
+    private final String mName;
 
+    protected DatabaseCertificate(long id, String name) {
+        mId = id;
+        mName = name;
+    }
 
+    public long getId() {
+        return mId;
+    }
 
+    public String getName() {
+        return mName;
+    }
 
-
-include ':libraries:Jumble', ':app'
+    @Override
+    public String toString() {
+        return mName;
+    }
+}

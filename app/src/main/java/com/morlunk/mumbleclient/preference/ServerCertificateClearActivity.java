@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014 Andrew Comminos
+ * Copyright (C) 2016 Andrew Comminos <andrew@comminos.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,10 +15,24 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+package com.morlunk.mumbleclient.preference;
 
+import android.app.Activity;
+import android.os.Bundle;
+import android.widget.Toast;
 
+import com.morlunk.mumbleclient.R;
+import com.morlunk.mumbleclient.util.PlumbleTrustStore;
 
-
-
-
-include ':libraries:Jumble', ':app'
+/**
+ * Created by andrew on 13/01/16.
+ */
+public class ServerCertificateClearActivity extends Activity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        PlumbleTrustStore.clearTrustStore(this);
+        Toast.makeText(this, R.string.trust_cleared, Toast.LENGTH_LONG).show();
+        finish();
+    }
+}

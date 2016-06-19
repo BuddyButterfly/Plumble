@@ -19,14 +19,11 @@ package com.morlunk.mumbleclient.service;
 
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
-import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.os.Bundle;
-import android.os.IBinder;
 import android.os.PowerManager;
-import android.os.RemoteException;
 import android.preference.PreferenceManager;
 import android.speech.tts.TextToSpeech;
 import android.view.WindowManager;
@@ -57,7 +54,7 @@ import java.util.List;
  */
 public class PlumbleService extends JumbleService implements
         SharedPreferences.OnSharedPreferenceChangeListener,
-        PlumbleNotification.OnActionListener,
+        PlumbleConnectionNotification.OnActionListener,
         PlumbleReconnectNotification.OnActionListener {
     /** Undocumented constant that permits a proximity-sensing wake lock. */
     public static final int PROXIMITY_SCREEN_OFF_WAKE_LOCK = 32;
@@ -65,7 +62,8 @@ public class PlumbleService extends JumbleService implements
     public static final int RECONNECT_DELAY = 10000;
 
     private Settings mSettings;
-    private PlumbleNotification mNotification;
+    private PlumbleConnectionNotification mNotification;
+    private PlumbleMessageNotification mMessageNotification;
     private PlumbleReconnectNotification mReconnectNotification;
     /** Channel view overlay. */
     private PlumbleOverlay mChannelOverlay;
@@ -117,7 +115,7 @@ public class PlumbleService extends JumbleService implements
                 mReconnectNotification = null;
             }
 
-            mNotification = PlumbleNotification.showForeground(PlumbleService.this,
+            mNotification = PlumbleConnectionNotification.showForeground(PlumbleService.this,
                     getString(R.string.plumbleConnecting),
                     getString(R.string.connecting),
                     PlumbleService.this);
@@ -217,6 +215,11 @@ public class PlumbleService extends JumbleService implements
                 mTTS.speak(formattedTtsMessage, TextToSpeech.QUEUE_ADD, null);
             }
 
+            // TODO: create a customizable notification sieve
+            if (mSettings.isChatNotifyEnabled()) {
+                mMessageNotification.show(message);
+            }
+
             mMessageLog.add(new IChatMessage.TextMessage(message));
         }
 
@@ -283,6 +286,7 @@ public class PlumbleService extends JumbleService implements
 
         mTalkReceiver = new TalkBroadcastReceiver(this);
         mMessageLog = new ArrayList<>();
+        mMessageNotification = new PlumbleMessageNotification(PlumbleService.this);
     }
 
     @Override
@@ -307,6 +311,7 @@ public class PlumbleService extends JumbleService implements
         unregisterObserver(mObserver);
         if(mTTS != null) mTTS.shutdown();
         mMessageLog = null;
+        mMessageNotification.dismiss();
         super.onDestroy();
     }
 
@@ -346,6 +351,7 @@ public class PlumbleService extends JumbleService implements
         setProximitySensorOn(false);
 
         mMessageLog.clear();
+        mMessageNotification.dismiss();
     }
 
     /**
@@ -410,8 +416,7 @@ public class PlumbleService extends JumbleService implements
             case Settings.PREF_FRAMES_PER_PACKET:
                 changedExtras.putInt(EXTRAS_FRAMES_PER_PACKET, mSettings.getFramesPerPacket());
                 break;
-            case Settings.PREF_CERT:
-            case Settings.PREF_CERT_PASSWORD:
+            case Settings.PREF_CERT_ID:
             case Settings.PREF_FORCE_TCP:
             case Settings.PREF_USE_TOR:
             case Settings.PREF_DISABLE_OPUS:
@@ -509,14 +514,16 @@ public class PlumbleService extends JumbleService implements
     }
 
     public void clearChatNotifications() {
-        if (mNotification != null) {
-            mNotification.clearMessages();
-            mNotification.show();
-        }
+        mMessageNotification.dismiss();
     }
 
     public void markErrorShown() {
         mErrorShown = true;
+        // Dismiss the reconnection prompt if a reconnection isn't in progress.
+        if (mReconnectNotification != null && !isReconnecting()) {
+            mReconnectNotification.hide();
+            mReconnectNotification = null;
+        }
     }
 
     public boolean isErrorShown() {

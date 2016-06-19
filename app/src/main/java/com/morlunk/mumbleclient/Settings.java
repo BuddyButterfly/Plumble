@@ -22,13 +22,25 @@ import android.content.SharedPreferences;
 import android.content.SharedPreferences.Editor;
 import android.media.AudioManager;
 import android.preference.PreferenceManager;
+import android.util.Log;
 import android.view.Gravity;
+import android.widget.Toast;
 
 import com.morlunk.jumble.Constants;
+import com.morlunk.mumbleclient.db.DatabaseCertificate;
+import com.morlunk.mumbleclient.db.PlumbleSQLiteDatabase;
 
+import org.spongycastle.jce.provider.BouncyCastleProvider;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -93,8 +105,19 @@ public class Settings {
     public static final String ARRAY_THEME_SOLARIZED_LIGHT = "solarizedLight";
     public static final String ARRAY_THEME_SOLARIZED_DARK = "solarizedDark";
 
-    public static final String PREF_CERT = "certificatePath";
-    public static final String PREF_CERT_PASSWORD = "certificatePassword";
+    public static final String PREF_PTT_BUTTON_HEIGHT = "pttButtonHeight";
+    public static final int DEFAULT_PTT_BUTTON_HEIGHT = 150;
+
+    /** @deprecated use {@link #PREF_CERT_ID } */
+    public static final String PREF_CERT_DEPRECATED = "certificatePath";
+    /** @deprecated use {@link #PREF_CERT_ID } */
+    public static final String PREF_CERT_PASSWORD_DEPRECATED = "certificatePassword";
+
+    /**
+     * The DB identifier for the default certificate.
+     * @see com.morlunk.mumbleclient.db.DatabaseCertificate
+     */
+    public static final String PREF_CERT_ID = "certificateId";
 
     public static final String PREF_DEFAULT_USERNAME = "defaultUsername";
     public static final String DEFAULT_DEFAULT_USERNAME = "Plumble_User"; // funny var name
@@ -138,6 +161,9 @@ public class Settings {
     public static final String PREF_STAY_AWAKE = "stay_awake";
     public static final boolean DEFAULT_STAY_AWAKE = false;
 
+    public static final String PREF_SHOW_USER_COUNT = "show_user_count";
+    public static final boolean DEFAULT_SHOW_USER_COUNT = false;
+
     static {
         ARRAY_INPUT_METHODS = new HashSet<String>();
         ARRAY_INPUT_METHODS.add(ARRAY_INPUT_METHOD_VOICE);
@@ -153,6 +179,50 @@ public class Settings {
 
     private Settings(Context ctx) {
         preferences = PreferenceManager.getDefaultSharedPreferences(ctx);
+
+        // TODO(acomminos): Settings migration infra.
+        if (preferences.contains(PREF_CERT_DEPRECATED)) {
+            // Perform legacy certificate migration into PlumbleSQLiteDatabase.
+            Toast.makeText(ctx, R.string.migration_certificate_begin, Toast.LENGTH_LONG).show();
+            String certPath = preferences.getString(PREF_CERT_DEPRECATED, "");
+            String certPassword = preferences.getString(PREF_CERT_PASSWORD_DEPRECATED, "");
+
+            Log.d(com.morlunk.mumbleclient.Constants.TAG, "Migrating certificate from " + certPath);
+            try {
+                File certFile = new File(certPath);
+                FileInputStream certInput = new FileInputStream(certFile);
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                KeyStore oldStore = KeyStore.getInstance("PKCS12", new BouncyCastleProvider());
+                oldStore.load(certInput, certPassword.toCharArray());
+                oldStore.store(outputStream, new char[0]);
+
+                PlumbleSQLiteDatabase database = new PlumbleSQLiteDatabase(ctx);
+                DatabaseCertificate certificate =
+                        database.addCertificate(certFile.getName(), outputStream.toByteArray());
+                database.close();
+
+                setDefaultCertificateId(certificate.getId());
+
+                Toast.makeText(ctx, R.string.migration_certificate_success, Toast.LENGTH_LONG).show();
+            } catch (KeyStoreException e) {
+                e.printStackTrace();
+            } catch (FileNotFoundException e) {
+                // We can safely ignore this; the only case in which we might still want to recover
+                // would be if the user's external storage is removed.
+            } catch (CertificateException e) {
+                // Likely caused due to stored password being incorrect.
+            } catch (NoSuchAlgorithmException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                preferences.edit()
+                        .remove(PREF_CERT_DEPRECATED)
+                        .remove(PREF_CERT_PASSWORD_DEPRECATED)
+                        .apply();
+            }
+
+        }
     }
 
     public String getInputMethod() {
@@ -256,30 +326,18 @@ public class Settings {
         return -1;
     }
 
+    /* @return the height of PTT button */
+    public int getPTTButtonHeight() {
+        return preferences.getInt(Settings.PREF_PTT_BUTTON_HEIGHT, DEFAULT_PTT_BUTTON_HEIGHT);
+    }
+
     /**
-     * Attempts to read the certificate from the path specified in settings.
-     * @return The parsed bytes of the certificate, or null otherwise.
+     * Returns a database identifier for the default certificate, or a negative number if there is
+     * no default certificate set.
+     * @return The default certificate's ID, or a negative integer if not set.
      */
-    public byte[] getCertificate() {
-        try {
-            FileInputStream inputStream = new FileInputStream(preferences.getString(PREF_CERT, ""));
-            byte[] buffer = new byte[inputStream.available()];
-            inputStream.read(buffer);
-            return buffer;
-        } catch (FileNotFoundException e) {
-            return null;
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public boolean isUsingCertificate() {
-        return preferences.contains(PREF_CERT);
-    }
-
-    public String getCertificatePassword() {
-        return preferences.getString(PREF_CERT_PASSWORD, "");
+    public long getDefaultCertificate() {
+        return preferences.getLong(PREF_CERT_ID, -1);
     }
 
     public String getDefaultUsername() {
@@ -345,12 +403,6 @@ public class Settings {
         editor.apply();
     }
 
-    public void setCertificatePath(String path) {
-        Editor editor = preferences.edit();
-        editor.putString(PREF_CERT, path);
-        editor.apply();
-    }
-
     public void setFirstRun(boolean run) {
         preferences.edit().putBoolean(PREF_FIRST_RUN, run).apply();
     }
@@ -377,5 +429,24 @@ public class Settings {
 
     public boolean shouldStayAwake() {
         return preferences.getBoolean(PREF_STAY_AWAKE, DEFAULT_STAY_AWAKE);
+    }
+
+    public void setDefaultCertificateId(long defaultCertificateId) {
+        preferences.edit().putLong(PREF_CERT_ID, defaultCertificateId).apply();
+    }
+
+    public void disableCertificate() {
+        preferences.edit().putLong(PREF_CERT_ID, -1).apply();
+    }
+
+    public boolean isUsingCertificate() {
+        return getDefaultCertificate() >= 0;
+    }
+
+    /**
+     * @return true if the user count should be shown next to channels.
+     */
+    public boolean shouldShowUserCount() {
+        return preferences.getBoolean(PREF_SHOW_USER_COUNT, DEFAULT_SHOW_USER_COUNT);
     }
 }

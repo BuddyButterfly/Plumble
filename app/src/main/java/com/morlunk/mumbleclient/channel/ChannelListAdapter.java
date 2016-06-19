@@ -43,6 +43,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import com.morlunk.jumble.IJumbleService;
+import com.morlunk.jumble.JumbleService;
 import com.morlunk.jumble.model.IChannel;
 import com.morlunk.jumble.model.IUser;
 import com.morlunk.jumble.model.Server;
@@ -84,15 +85,18 @@ public class ChannelListAdapter extends RecyclerView.Adapter implements UserMenu
     private HashMap<Integer, Boolean> mExpandedChannels;
     private OnUserClickListener mUserClickListener;
     private OnChannelClickListener mChannelClickListener;
+    private boolean mShowChannelUserCount;
     private final FragmentManager mFragmentManager;
 
     public ChannelListAdapter(Context context, IJumbleService service, PlumbleDatabase database,
-                              FragmentManager fragmentManager, boolean showPinnedOnly) throws RemoteException {
+                              FragmentManager fragmentManager, boolean showPinnedOnly,
+                              boolean showChannelUserCount) throws RemoteException {
         setHasStableIds(true);
         mContext = context;
         mService = service;
         mDatabase = database;
         mFragmentManager = fragmentManager;
+        mShowChannelUserCount = showChannelUserCount;
 
         mRootChannels = new ArrayList<Integer>();
         if(showPinnedOnly) {
@@ -154,8 +158,30 @@ public class ChannelListAdapter extends RecyclerView.Adapter implements UserMenu
 
             cvh.mChannelName.setText(channel.getName());
 
-            int userCount = channel.getSubchannelUserCount();
-            cvh.mChannelUserCount.setText(String.format("%d", userCount));
+            int nameTypeface = Typeface.NORMAL;
+            if (mService != null &&
+                    mService.getConnectionState() == JumbleService.ConnectionState.CONNECTED) {
+                if (channel.equals(mService.getSessionChannel())) {
+                    nameTypeface |= Typeface.BOLD;
+                    // Always italicize our current channel if it has a link.
+                    if (channel.getLinks().size() > 0) {
+                        nameTypeface |= Typeface.ITALIC;
+                    }
+                }
+                // Italicize channels in a link with our current channel.
+                if (channel.getLinks().contains(mService.getSessionChannel())) {
+                    nameTypeface |= Typeface.ITALIC;
+                }
+            }
+            cvh.mChannelName.setTypeface(null, nameTypeface);
+
+            if (mShowChannelUserCount) {
+                cvh.mChannelUserCount.setVisibility(View.VISIBLE);
+                int userCount = channel.getSubchannelUserCount();
+                cvh.mChannelUserCount.setText(String.format("%d", userCount));
+            } else {
+                cvh.mChannelUserCount.setVisibility(View.GONE);
+            }
 
             // Pad the view depending on channel's nested level.
             DisplayMetrics metrics = mContext.getResources().getDisplayMetrics();
@@ -164,6 +190,13 @@ public class ChannelListAdapter extends RecyclerView.Adapter implements UserMenu
                     cvh.mChannelHolder.getPaddingTop(),
                     cvh.mChannelHolder.getPaddingRight(),
                     cvh.mChannelHolder.getPaddingBottom());
+
+            cvh.mJoinButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    mService.joinChannel(channel.getId());
+                }
+            });
 
             cvh.mMoreButton.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -380,6 +413,14 @@ public class ChannelListAdapter extends RecyclerView.Adapter implements UserMenu
     }
 
     /**
+     * Sets whether to show the channel user count in a channel row.
+     */
+    public void setShowChannelUserCount(boolean showUserCount) {
+        mShowChannelUserCount = showUserCount;
+        notifyDataSetChanged();
+    }
+
+    /**
      * Recursively creates a list of {@link Node}s representing the channel hierarchy.
      * @param parent The parent node to propagate under.
      * @param channel The parent channel.
@@ -468,6 +509,7 @@ public class ChannelListAdapter extends RecyclerView.Adapter implements UserMenu
         public ImageView mChannelExpandToggle;
         public TextView mChannelName;
         public TextView mChannelUserCount;
+        public ImageView mJoinButton;
         public ImageView mMoreButton;
 
         public ChannelViewHolder(View itemView) {
@@ -476,6 +518,7 @@ public class ChannelListAdapter extends RecyclerView.Adapter implements UserMenu
             mChannelExpandToggle = (ImageView) itemView.findViewById(R.id.channel_row_expand);
             mChannelName = (TextView) itemView.findViewById(R.id.channel_row_name);
             mChannelUserCount = (TextView) itemView.findViewById(R.id.channel_row_count);
+            mJoinButton = (ImageView) itemView.findViewById(R.id.channel_row_join);
             mMoreButton = (ImageView) itemView.findViewById(R.id.channel_row_more);
         }
     }
