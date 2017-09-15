@@ -68,11 +68,9 @@ public class PlumbleConnectionNotification {
      * @param listener An listener for notification actions.
      * @return A new PlumbleNotification instance.
      */
-    public static PlumbleConnectionNotification showForeground(Service service, String ticker, String contentText,
-                                                     OnActionListener listener) {
-        PlumbleConnectionNotification notification = new PlumbleConnectionNotification(service, ticker, contentText, listener);
-        notification.show();
-        return notification;
+    public static PlumbleConnectionNotification create(Service service, String ticker, String contentText,
+                                                       OnActionListener listener) {
+        return new PlumbleConnectionNotification(service, ticker, contentText, listener);
     }
 
     private PlumbleConnectionNotification(Service service, String ticker, String contentText,
@@ -135,7 +133,7 @@ public class PlumbleConnectionNotification {
         builder.setContentTitle(mService.getString(R.string.app_name));
         builder.setContentText(mCustomContentText);
         builder.setSmallIcon(R.drawable.ic_stat_notify);
-        builder.setPriority(NotificationCompat.PRIORITY_MIN);
+        builder.setPriority(NotificationCompat.PRIORITY_DEFAULT);
         builder.setOngoing(true);
 
         if (mActionsShown) {
